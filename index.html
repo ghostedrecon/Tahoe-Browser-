@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tahoe Browser</title>
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.12);
+            --glass-border: rgba(255, 255, 255, 0.25);
+            --text-color: #ffffff;
+            --bg-gradient: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            --accent-color: #ffffff;
+            --accent-glow: rgba(255, 255, 255, 0.35);
+        }
+
+        /* Primary Themes */
+        body.theme-aurora { --bg-gradient: linear-gradient(135deg, #134e5e 0%, #71b280 100%); }
+        body.theme-obsidian { --bg-gradient: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
+        body.theme-sunset { --bg-gradient: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%); }
+        body.theme-america { --bg-gradient: linear-gradient(135deg, #0a192f 0%, #1e3a8a 50%, #b91c1c 100%); }
+
+        /* Secondary Accent Themes */
+        body.accent-cyan {
+            --accent-color: #06b6d4;
+            --accent-glow: rgba(6, 182, 212, 0.5);
+        }
+        body.accent-rose {
+            --accent-color: #f43f5e;
+            --accent-glow: rgba(244, 63, 94, 0.5);
+        }
+        body.accent-emerald {
+            --accent-color: #10b981;
+            --accent-glow: rgba(16, 185, 129, 0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-gradient);
+            background-size: cover;
+            background-position: center;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-color);
+            overflow: hidden;
+            transition: background 0.5s ease;
+        }
+
+        @keyframes windowOpen {
+            0% {
+                opacity: 0;
+                transform: scale(0.94) translateY(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .browser-app-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+
+        .browser-app-wrapper.active {
+            opacity: 1;
+            pointer-events: auto;
+            animation: windowOpen 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Titlebar, Workspaces & Tabs */
+        .window-header {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px 0 16px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            gap: 15px;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .dot-close { background-color: #ff5f56; }
+        .dot-min { background-color: #ffbd2e; }
+        .dot-max { background-color: #27c93f; }
+
+        .workspace-selector {
+            display: flex;
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .ws-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .ws-btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border-color: var(--accent-glow);
+        }
+
+        .tabs-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-grow: 1;
+            overflow-x: auto;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.15);
+            border: 1px solid var(--glass-border);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            font-size: 13px;
+            cursor: pointer;
+            max-width: 170px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 0.75;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .tab.active {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--accent-glow);
+            opacity: 1;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-badge {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-weight: 600;
+            line-height: 1;
+        }
+        .tab-ws-General .tab-badge { background: rgba(255, 255, 255, 0.2); color: #fff; }
+        .tab-ws-School .tab-badge { background: rgba(251, 191, 36, 0.3); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.4); }
+        .tab-ws-Dev .tab-badge { background: rgba(96, 165, 250, 0.3); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.4); }
+
+        .tab-close {
+            font-weight: bold;
+            font-size: 12px;
+            border-radius: 50%;
+            padding: 2px 4px;
+            margin-left: auto;
+        }
+
+        .tab-close:hover { background: rgba(255, 255, 255, 0.3); }
+
+        .add-tab-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid var(--glass-border);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* Toolbar */
+        .navbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            border-radius: 6px;
+            color: white;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: var(--accent-glow);
+        }
+
+        .address-container {
+            display: flex;
+            align-items: center;
+            flex-grow: 1;
+            position: relative;
+        }
+
+        .address-bar {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 8px 35px 8px 15px;
+            color: var(--text-color);
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .address-bar:focus {
+            background: rgba(0, 0, 0, 0.35);
+            border-color: var(--accent-glow);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .star-bookmark-btn {
+            position: absolute;
+            right: 8px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            font-size: 16px;
+            transition: color 0.2s, transform 0.2s;
+        }
+
+        .star-bookmark-btn.active {
+            color: #ffd700;
+            transform: scale(1.15);
+        }
+
+        /* Bookmarks Bar */
+        .bookmarks-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 16px;
+            background: rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 12px;
+            overflow-x: auto;
+        }
+
+        .bookmark-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--glass-border);
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .bookmark-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--accent-glow);
+        }
+
+        .theme-select {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--glass-border);
+            border-radius: 6px;
+            color: white;
+            padding: 6px 10px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Layout Container */
+        .main-container {
+            display: flex;
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Permanent Left Sidebar */
+        .sidebar-permanent {
+            width: 280px;
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-right: 1px solid var(--glass-border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-widget {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sidebar-widget h4 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .widget-notes {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: white;
+            padding: 10px;
+            font-family: inherit;
+            font-size: 13px;
+            resize: none;
+            height: 100px;
+            outline: none;
+        }
+
+        .widget-notes:focus {
+            border-color: var(--accent-glow);
+        }
+
+        .timer-display {
+            font-size: 28px;
+            font-weight: bold;
+            text-align: center;
+            letter-spacing: 2px;
+            margin: 5px 0;
+            color: var(--accent-color);
+        }
+
+        .timer-controls {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        /* Viewports */
+        .viewports-wrapper {
+            flex-grow: 1;
+            display: flex;
+            gap: 15px;
+            margin: 15px;
+            overflow: hidden;
+        }
+
+        .viewport-container {
+            flex: 1;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            overflow-y: auto;
+            padding: 25px;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+        }
+
+        .viewport-container.secondary-view {
+            display: none;
+        }
+
+        .viewports-wrapper.split-active .viewport-container.secondary-view {
+            display: flex;
+        }
+
+        /* Search Results SERP View */
+        .tahoe-search-results {
+            width: 100%;
+            max-width: 720px;
+            text-align: left;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .tahoe-search-results.active {
+            display: flex;
+        }
+
+        .tahoe-home-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        .tahoe-home-view.hidden {
+            display: none;
+        }
+
+        .search-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid var(--glass-border);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .search-item-card {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 16px;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .search-item-card:hover {
+            background: rgba(255, 255, 255, 0.14);
+            transform: translateY(-2px);
+            border-color: var(--accent-glow);
+        }
+
+        .search-item-title {
+            font-size: 16px;
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: inline-block;
+        }
+
+        .search-item-title:hover {
+            text-decoration: underline;
+        }
+
+        .search-item-url {
+            font-size: 12px;
+            opacity: 0.6;
+            margin-bottom: 8px;
+        }
+
+        .search-item-snippet {
+            font-size: 13.5px;
+            line-height: 1.45;
+            opacity: 0.9;
+        }
+
+        /* Modal Overlays */
+        @keyframes modalFadeOut {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.03); visibility: hidden; }
+        }
+
+        .setup-overlay, .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            transition: opacity 0.4s ease;
+        }
+
+        .setup-overlay.fade-out {
+            animation: modalFadeOut 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .setup-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            padding: 35px 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            text-align: center;
+            width: 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .setup-card h2 {
+            margin: 0 0 5px 0;
+            font-weight: 400;
+        }
+
+        .setup-input, .setup-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: white;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .disclaimer-box {
+            font-size: 11px;
+            opacity: 0.7;
+            line-height: 1.4;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: left;
+        }
+
+        .setup-btn {
+            background: rgba(255, 255, 255, 0.25);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: white;
+            padding: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .setup-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: var(--accent-glow);
+        }
+
+        .user-tag {
+            font-size: 13px;
+            opacity: 0.9;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 4px 10px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+
+        /* Quick Dials */
+        .quick-dial {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 25px;
+            max-width: 500px;
+        }
+
+        .tile {
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-decoration: none;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .tile:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.25);
+            border-color: var(--accent-glow);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .tile-icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+        }
+
+        .tile-add {
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+        }
+
+        .wallpaper-input {
+            margin-top: 25px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .wallpaper-input input {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--glass-border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: white;
+            outline: none;
+            font-size: 12px;
+            width: 220px;
+        }
+
+        /* Drawers */
+        .slide-drawer {
+            position: fixed;
+            top: 0;
+            right: -300px;
+            width: 280px;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-left: 1px solid var(--glass-border);
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+            transition: right 0.3s ease;
+            z-index: 100;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slide-drawer.open { right: 0; }
+
+        .drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        .drawer-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .drawer-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .drawer-item a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Registration Modal -->
+    <div class="setup-overlay" id="setupOverlay">
+        <div class="setup-card">
+            <h2>Welcome to Tahoe</h2>
+            <p style="font-size: 13px; margin-top: -5px; opacity: 0.8;">Create your browser profile</p>
+            <input type="text" id="usernameInput" class="setup-input" placeholder="Enter username..." required>
+            <select id="initialColorSelect" class="setup-select">
+                <option value="America">Tahoe America 🇺🇸</option>
+                <option value="Blue">Blue (Classic)</option>
+                <option value="Green">Green (Aurora)</option>
+                <option value="Dark">Dark (Obsidian)</option>
+                <option value="Sunset">Sunset (Glow)</option>
+            </select>
+            
+            <div class="disclaimer-box">
+                <strong>Disclaimer:</strong> Tahoe Browser is an independent open-source, non-commercial web prototype built for educational purposes.
+            </div>
+
+            <button class="setup-btn" id="finishSetupBtn">Launch Browser</button>
+        </div>
+    </div>
+
+    <!-- Custom Tile Modal -->
+    <div class="modal-overlay" id="tileModal" style="display: none;">
+        <div class="setup-card">
+            <h3>Add Quick Shortcut</h3>
+            <input type="text" id="tileTitleInput" class="setup-input" placeholder="Title (e.g. GitHub)">
+            <input type="text" id="tileUrlInput" class="setup-input" placeholder="URL (e.g. https://github.com)">
+            <input type="text" id="tileIconInput" class="setup-input" placeholder="Emoji Icon (e.g. 🐙)">
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="setup-btn" style="flex: 1;" id="saveTileBtn">Save</button>
+                <button class="setup-btn" style="flex: 1; background: rgba(255,255,255,0.1);" id="cancelTileBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Browser App Container -->
+    <div class="browser-app-wrapper" id="browserAppWrapper">
+        <!-- Header, Workspaces & Tabs -->
+        <div class="window-header">
+            <div class="window-controls">
+                <div class="dot dot-close"></div>
+                <div class="dot dot-min"></div>
+                <div class="dot dot-max"></div>
+            </div>
+
+            <!-- Workspace Groups -->
+            <div class="workspace-selector">
+                <button class="ws-btn active" onclick="switchWorkspace('General')">Main</button>
+                <button class="ws-btn" onclick="switchWorkspace('School')">🏫 School</button>
+                <button class="ws-btn" onclick="switchWorkspace('Dev')">💻 Dev</button>
+            </div>
+
+            <div class="tabs-container" id="tabsContainer"></div>
+            <button class="add-tab-btn" id="addTabBtn">+</button>
+        </div>
+
+        <!-- Navigation Bar -->
+        <div class="navbar">
+            <button class="nav-btn" onclick="window.history.back()">&#x21E6;</button>
+            <button class="nav-btn" onclick="window.history.forward()">&#x21E8;</button>
+            <button class="nav-btn" onclick="goHome()">🏠 Home</button>
+            
+            <div class="address-container">
+                <input type="text" id="addressBar" class="address-bar" placeholder="Search Tahoe Engine or enter URL..." autofocus>
+                <button class="star-bookmark-btn" id="starBookmarkBtn" title="Bookmark site">★</button>
+            </div>
+            
+            <button class="nav-btn" id="splitViewBtn">📱 Split</button>
+            <span class="user-tag" id="userDisplayTag">User</span>
+
+            <!-- Primary Theme Select -->
+            <select class="theme-select" id="themeSelect">
+                <option value="America">America 🇺🇸</option>
+                <option value="Blue">Blue</option>
+                <option value="Green">Green</option>
+                <option value="Dark">Dark</option>
+                <option value="Sunset">Sunset</option>
+            </select>
+
+            <!-- Secondary Accent Select -->
+            <select class="theme-select" id="accentSelect">
+                <option value="default">Default Glow</option>
+                <option value="cyan">Neon Cyan</option>
+                <option value="rose">Rose Gold</option>
+                <option value="emerald">Emerald</option>
+            </select>
+
+            <button class="nav-btn" id="toggleDownloads">📥 Downloads</button>
+            <button class="nav-btn" id="toggleHistory">📜 History</button>
+            <button class="nav-btn" id="openSettingsBtn">⚙️ Profile</button>
+        </div>
+
+        <!-- Bookmarks Bar -->
+        <div class="bookmarks-bar" id="bookmarksBar">
+            <span style="opacity: 0.6; font-size: 11px;">Bookmarks:</span>
+        </div>
+
+        <!-- Main Container -->
+        <div class="main-container">
+            <!-- Sidebar -->
+            <div class="sidebar-permanent">
+                <div class="sidebar-widget">
+                    <h4>📝 Quick Scratchpad</h4>
+                    <textarea class="widget-notes" id="quickNotes" placeholder="Jot down quick thoughts..."></textarea>
+                </div>
+
+                <div class="sidebar-widget">
+                    <h4>⏱️ Focus Timer</h4>
+                    <div class="timer-display" id="timerDisplay">25:00</div>
+                    <div class="timer-controls">
+                        <button class="nav-btn" id="startTimerBtn">Start</button>
+                        <button class="nav-btn" id="resetTimerBtn">Reset</button>
+                    </div>
+                </div>
+
+                <div class="sidebar-widget">
+                    <h4>🎵 Ambient Audio</h4>
+                    <audio controls style="width: 100%; height: 32px; filter: invert(1);">
+                        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+            </div>
+
+            <!-- Dual Viewports Wrapper -->
+            <div class="viewports-wrapper" id="viewportsWrapper">
+                <!-- Primary Viewport Frame -->
+                <div class="viewport-container">
+                    <div class="tahoe-home-view" id="tahoeHomeView">
+                        <h1 id="welcomeHeading">Welcome to Tahoe America</h1>
+                        <p id="subGreeting">Type a query in the address bar to search with Tahoe Search.</p>
+
+                        <div class="quick-dial" id="quickDialGrid"></div>
+
+                        <div class="wallpaper-input">
+                            <input type="text" id="bgUrlInput" placeholder="Paste custom image URL...">
+                            <button class="nav-btn" id="setBgBtn">Set Wallpaper</button>
+                        </div>
+                    </div>
+
+                    <!-- Tahoe Search Results SERP Container -->
+                    <div class="tahoe-search-results" id="tahoeSearchResults">
+                        <div class="search-badge">⚡ Powered by Tahoe Glass Engine</div>
+                        <h2 id="searchResultsTitle" style="margin: 0 0 10px 0; font-weight: 500;">Results for "..."</h2>
+                        <div id="searchResultsList" style="display: flex; flex-direction: column; gap: 12px;"></div>
+                    </div>
+                </div>
+
+                <!-- Secondary Split Viewport Frame -->
+                <div class="viewport-container secondary-view">
+                    <h2>Split View Viewport</h2>
+                    <p style="font-size: 13px; opacity: 0.8;">Side-by-side reference frame</p>
+                    <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; border: 1px solid var(--glass-border); width: 80%;">
+                        🔍 Native glassmorphism split viewport active.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Drawer -->
+    <div class="slide-drawer" id="historyDrawer">
+        <div class="drawer-header">
+            <h3 style="margin: 0;">Session History</h3>
+            <button class="nav-btn" id="closeHistory">&times;</button>
+        </div>
+        <ul class="drawer-list" id="historyList"></ul>
+    </div>
+
+    <!-- Downloads Drawer -->
+    <div class="slide-drawer" id="downloadsDrawer">
+        <div class="drawer-header">
+            <h3 style="margin: 0;">Downloads</h3>
+            <button class="nav-btn" id="closeDownloads">&times;</button>
+        </div>
+        <ul class="drawer-list" id="downloadsList">
+            <li class="drawer-item">📄 Tahoe_Documentation.pdf</li>
+            <li class="drawer-item">📦 Theme_Assets.zip</li>
+        </ul>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(freq = 440, type = 'sine', duration = 0.08) {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        let tabs = [];
+        let activeTabId = null;
+        let activeWorkspace = 'General';
+        let history = [];
+        let downloads = ['Tahoe_Documentation.pdf', 'Theme_Assets.zip'];
+        let bookmarks = JSON.parse(localStorage.getItem('tahoe_bookmarks')) || [
+            { title: 'Tahoe Search', url: 'tahoe://search' },
+            { title: 'GitHub', url: 'https://github.com' }
+        ];
+        let tiles = JSON.parse(localStorage.getItem('tahoe_tiles')) || [
+            { icon: '🔍', title: 'Tahoe Search', url: 'tahoe://search' },
+            { icon: '🐙', title: 'GitHub', url: 'https://github.com' },
+            { icon: '🤖', title: 'Reddit', url: 'https://reddit.com' },
+            { icon: '🐦', title: 'Twitter', url: 'https://twitter.com' }
+        ];
+        let userProfile = JSON.parse(localStorage.getItem('tahoe_profile')) || { username: '', color: 'America', accent: 'default', wallpaper: '' };
+
+        const tabsContainer = document.getElementById('tabsContainer');
+        const addressBar = document.getElementById('addressBar');
+        const addTabBtn = document.getElementById('addTabBtn');
+        const themeSelect = document.getElementById('themeSelect');
+        const accentSelect = document.getElementById('accentSelect');
+        const historyDrawer = document.getElementById('historyDrawer');
+        const downloadsDrawer = document.getElementById('downloadsDrawer');
+        const historyList = document.getElementById('historyList');
+        const setupOverlay = document.getElementById('setupOverlay');
+        const browserAppWrapper = document.getElementById('browserAppWrapper');
+        const welcomeHeading = document.getElementById('welcomeHeading');
+        const subGreeting = document.getElementById('subGreeting');
+        const userDisplayTag = document.getElementById('userDisplayTag');
+        const quickNotes = document.getElementById('quickNotes');
+        const bookmarksBar = document.getElementById('bookmarksBar');
+        const quickDialGrid = document.getElementById('quickDialGrid');
+        const starBookmarkBtn = document.getElementById('starBookmarkBtn');
+        const viewportsWrapper = document.getElementById('viewportsWrapper');
+        const tahoeHomeView = document.getElementById('tahoeHomeView');
+        const tahoeSearchResults = document.getElementById('tahoeSearchResults');
+        const searchResultsTitle = document.getElementById('searchResultsTitle');
+        const searchResultsList = document.getElementById('searchResultsList');
+
+        quickNotes.value = localStorage.getItem('tahoe_notes') || '';
+        quickNotes.oninput = () => localStorage.setItem('tahoe_notes', quickNotes.value);
+
+        let timerInterval = null;
+        let timeLeft = 25 * 60;
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            document.getElementById('timerDisplay').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        document.getElementById('startTimerBtn').onclick = () => {
+            playSound(600, 'triangle');
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                document.getElementById('startTimerBtn').textContent = 'Start';
+            } else {
+                document.getElementById('startTimerBtn').textContent = 'Pause';
+                timerInterval = setInterval(() => {
+                    if (timeLeft > 0) {
+                        timeLeft--;
+                        updateTimerDisplay();
+                    } else {
+                        clearInterval(timerInterval);
+                        alert('Focus session complete!');
+                    }
+                }, 1000);
+            }
+        };
+
+        document.getElementById('resetTimerBtn').onclick = () => {
+            playSound(300, 'sine');
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timeLeft = 25 * 60;
+            document.getElementById('startTimerBtn').textContent = 'Start';
+            updateTimerDisplay();
+        };
+
+        function switchWorkspace(wsName) {
+            playSound(520, 'sine');
+            activeWorkspace = wsName;
+            document.querySelectorAll('.ws-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.includes(wsName));
+            });
+            renderTabs();
+        }
+
+        function applyColorTheme(colorName, accentName = userProfile.accent) {
+            userProfile.color = colorName;
+            userProfile.accent = accentName;
+            themeSelect.value = colorName;
+            accentSelect.value = accentName;
+            
+            document.body.style.backgroundImage = userProfile.wallpaper ? `url('${userProfile.wallpaper}')` : '';
+            document.body.className = '';
+
+            if (colorName === 'Green') document.body.classList.add('theme-aurora');
+            else if (colorName === 'Dark') document.body.classList.add('theme-obsidian');
+            else if (colorName === 'Sunset') document.body.classList.add('theme-sunset');
+            else if (colorName === 'America') document.body.classList.add('theme-america');
+
+            if (accentName === 'cyan') document.body.classList.add('accent-cyan');
+            else if (accentName === 'rose') document.body.classList.add('accent-rose');
+            else if (accentName === 'emerald') document.body.classList.add('accent-emerald');
+
+            welcomeHeading.textContent = `Welcome to Tahoe ${colorName}`;
+            if (userProfile.username) {
+                subGreeting.textContent = `Ready to browse, ${userProfile.username}? Type a search query to test Tahoe Search.`;
+            }
+            saveProfile();
+        }
+
+        function saveProfile() {
+            localStorage.setItem('tahoe_profile', JSON.stringify(userProfile));
+        }
+
+        document.getElementById('finishSetupBtn').onclick = () => {
+            playSound(700, 'sine');
+            const name = document.getElementById('usernameInput').value.trim();
+            if (!name) return alert('Please enter a username to proceed!');
+
+            userProfile.username = name;
+            const chosenColor = document.getElementById('initialColorSelect').value;
+
+            userDisplayTag.textContent = `@${userProfile.username}`;
+            applyColorTheme(chosenColor);
+            
+            setupOverlay.classList.add('fade-out');
+            browserAppWrapper.classList.add('active');
+            
+            if (tabs.length === 0) createTab();
+        };
+
+        function renderBookmarks() {
+            bookmarksBar.innerHTML = '<span style="opacity: 0.6; font-size: 11px;">Bookmarks:</span>';
+            bookmarks.forEach(bm => {
+                const link = document.createElement('a');
+                link.className = 'bookmark-item';
+                link.textContent = '⭐ ' + bm.title;
+                link.onclick = () => {
+                    playSound(480, 'sine');
+                    if (bm.url === 'tahoe://search') goHome();
+                    else launchExternalUrl(bm.url);
+                };
+                bookmarksBar.appendChild(link);
+            });
+            localStorage.setItem('tahoe_bookmarks', JSON.stringify(bookmarks));
+        }
+
+        starBookmarkBtn.onclick = () => {
+            playSound(800, 'triangle');
+            const currentUrl = addressBar.value.trim();
+            if (!currentUrl) return;
+            
+            const existingIndex = bookmarks.findIndex(b => b.url === currentUrl);
+            if (existingIndex >= 0) {
+                bookmarks.splice(existingIndex, 1);
+                starBookmarkBtn.classList.remove('active');
+            } else {
+                const title = prompt('Bookmark Title:', currentUrl.replace('https://', '')) || currentUrl;
+                bookmarks.push({ title, url: currentUrl });
+                starBookmarkBtn.classList.add('active');
+            }
+            renderBookmarks();
+        };
+
+        function renderTiles() {
+            quickDialGrid.innerHTML = '';
+            tiles.forEach(tile => {
+                const a = document.createElement('a');
+                a.className = 'tile';
+                a.href = '#';
+                a.onclick = () => {
+                    playSound(450, 'sine');
+                    if (tile.url === 'tahoe://search') goHome();
+                    else launchExternalUrl(tile.url);
+                };
+                a.innerHTML = `<span class="tile-icon">${tile.icon || '🌐'}</span><span>${tile.title}</span>`;
+                quickDialGrid.appendChild(a);
+            });
+
+            const addTile = document.createElement('div');
+            addTile.className = 'tile tile-add';
+            addTile.onclick = () => {
+                playSound(550, 'sine');
+                document.getElementById('tileModal').style.display = 'flex';
+            };
+            addTile.innerHTML = `<span class="tile-icon">➕</span><span>Add</span>`;
+            quickDialGrid.appendChild(addTile);
+
+            localStorage.setItem('tahoe_tiles', JSON.stringify(tiles));
+        }
+
+        document.getElementById('saveTileBtn').onclick = () => {
+            playSound(650, 'sine');
+            const title = document.getElementById('tileTitleInput').value.trim();
+            let url = document.getElementById('tileUrlInput').value.trim();
+            const icon = document.getElementById('tileIconInput').value.trim() || '🔗';
+
+            if (!title || !url) return alert('Please enter both title and URL!');
+            if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+
+            tiles.push({ title, url, icon });
+            renderTiles();
+            document.getElementById('tileModal').style.display = 'none';
+            document.getElementById('tileTitleInput').value = '';
+            document.getElementById('tileUrlInput').value = '';
+            document.getElementById('tileIconInput').value = '';
+        };
+
+        document.getElementById('cancelTileBtn').onclick = () => {
+            playSound(350, 'sine');
+            document.getElementById('tileModal').style.display = 'none';
+        };
+
+        function getWorkspaceBadge(ws) {
+            if (ws === 'School') return '🏫 School';
+            if (ws === 'Dev') return '💻 Dev';
+            return 'Main';
+        }
+
+        function renderTabs() {
+            tabsContainer.innerHTML = '';
+            tabs.forEach(t => {
+                const tabEl = document.createElement('div');
+                tabEl.className = `tab tab-ws-${t.workspace} ${t.id === activeTabId ? 'active' : ''}`;
+                tabEl.id = `el-${t.id}`;
+                tabEl.onclick = () => switchTab(t.id);
+                
+                tabEl.innerHTML = `
+                    <span class="tab-badge">${getWorkspaceBadge(t.workspace)}</span>
+                    <span id="title-${t.id}">${t.title}</span>
+                    <span class="tab-close" onclick="event.stopPropagation(); closeTab('${t.id}')">&times;</span>
+                `;
+                tabsContainer.appendChild(tabEl);
+            });
+        }
+
+        function createTab() {
+            playSound(500, 'sine');
+            const id = 'tab-' + Date.now();
+            tabs.push({ id, title: 'Tahoe Search', workspace: activeWorkspace, query: '' });
+            renderTabs();
+            switchTab(id);
+        }
+
+        function switchTab(id) {
+            playSound(400, 'sine');
+            activeTabId = id;
+            renderTabs();
+            
+            const tab = tabs.find(t => t.id === id);
+            if (tab && tab.query) {
+                addressBar.value = tab.query;
+                executeTahoeSearch(tab.query, false);
+            } else {
+                goHome();
+            }
+        }
+
+        function closeTab(id) {
+            playSound(300, 'sine');
+            if (tabs.length === 1) return;
+            tabs = tabs.filter(t => t.id !== id);
+            if (activeTabId === id) {
+                switchTab(tabs[tabs.length - 1].id);
+            } else {
+                renderTabs();
+            }
+        }
+
+        function goHome() {
+            tahoeHomeView.classList.remove('hidden');
+            tahoeSearchResults.classList.remove('active');
+            addressBar.value = '';
+            const activeTab = tabs.find(t => t.id === activeTabId);
+            if (activeTab) {
+                activeTab.title = 'Tahoe Search';
+                activeTab.query = '';
+                renderTabs();
+            }
+        }
+
+        function launchExternalUrl(targetUrl) {
+            addToHistory(targetUrl);
+            window.open(targetUrl, '_blank');
+        }
+
+        function executeTahoeSearch(query, logHistory = true) {
+            if (!query.trim()) return goHome();
+
+            const encodedQuery = encodeURIComponent(query);
+            if (logHistory) addToHistory(`tahoe://search?q=${encodedQuery}`);
+
+            const activeTab = tabs.find(t => t.id === activeTabId);
+            if (activeTab) {
+                activeTab.title = query;
+                activeTab.query = query;
+                renderTabs();
+            }
+
+            tahoeHomeView.classList.add('hidden');
+            tahoeSearchResults.classList.add('active');
+            searchResultsTitle.textContent = `Results for "${query}"`;
+
+            const realWebResults = [
+                {
+                    title: `DuckDuckGo Search: "${query}"`,
+                    url: `https://duckduckgo.com/?q=${encodedQuery}`,
+                    snippet: `Perform a full privacy-focused web search for "${query}" on DuckDuckGo.`
+                },
+                {
+                    title: `Wikipedia: "${query}"`,
+                    url: `https://en.wikipedia.org/wiki/Special:Search?search=${encodedQuery}`,
+                    snippet: `Search Wikipedia encyclopedia entries and background information on "${query}".`
+                },
+                {
+                    title: `YouTube Videos: "${query}"`,
+                    url: `https://www.youtube.com/results?search_query=${encodedQuery}`,
+                    snippet: `Watch video tutorials, music, clips, and live streams for "${query}" on YouTube.`
+                },
+                {
+                    title: `Reddit Discussions: "${query}"`,
+                    url: `https://www.reddit.com/search/?q=${encodedQuery}`,
+                    snippet: `Browse community posts, discussions, and answers about "${query}" on Reddit.`
+                },
+                {
+                    title: `Google Search: "${query}"`,
+                    url: `https://www.google.com/search?q=${encodedQuery}`,
+                    snippet: `Open direct web search results for "${query}" via Google.`
+                }
+            ];
+
+            searchResultsList.innerHTML = realWebResults.map(res => `
+                <div class="search-item-card">
+                    <a href="${res.url}" onclick="event.preventDefault(); launchExternalUrl('${res.url}')" class="search-item-title">${res.title}</a>
+                    <div class="search-item-url">${res.url}</div>
+                    <div class="search-item-snippet">${res.snippet}</div>
+                </div>
+            `).join('');
+        }
+
+        function navigate(input) {
+            const query = input.trim();
+            if (!query) return;
+
+            if (query.startsWith('http://') || query.startsWith('https://')) {
+                launchExternalUrl(query);
+            } else if (query.includes('.') && !query.includes(' ')) {
+                launchExternalUrl('https://' + query);
+            } else {
+                executeTahoeSearch(query);
+            }
+        }
+
+        function addToHistory(url) {
+            history.unshift(url);
+            historyList.innerHTML = history.map(item => `<li class="drawer-item"><a href="${item}" target="_blank">${item}</a></li>`).join('');
+        }
+
+        addressBar.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') navigate(addressBar.value);
+        });
+
+        addTabBtn.onclick = () => createTab();
+
+        themeSelect.onchange = (e) => {
+            playSound(440, 'sine');
+            applyColorTheme(e.target.value, userProfile.accent);
+        };
+
+        accentSelect.onchange = (e) => {
+            playSound(440, 'sine');
+            applyColorTheme(userProfile.color, e.target.value);
+        };
+
+        document.getElementById('setBgBtn').onclick = () => {
+            playSound(580, 'sine');
+            const url = document.getElementById('bgUrlInput').value.trim();
+            if (url) {
+                userProfile.wallpaper = url;
+                document.body.style.backgroundImage = `url('${url}')`;
+                saveProfile();
+            }
+        };
+
+        document.getElementById('splitViewBtn').onclick = () => {
+            playSound(520, 'triangle');
+            viewportsWrapper.classList.toggle('split-active');
+        };
+
+        document.getElementById('toggleHistory').onclick = () => {
+            playSound(420, 'sine');
+            historyDrawer.classList.add('open');
+        };
+        document.getElementById('closeHistory').onclick = () => {
+            playSound(320, 'sine');
+            historyDrawer.classList.remove('open');
+        };
+
+        document.getElementById('toggleDownloads').onclick = () => {
+            playSound(420, 'sine');
+            downloadsDrawer.classList.add('open');
+        };
+        document.getElementById('closeDownloads').onclick = () => {
+            playSound(320, 'sine');
+            downloadsDrawer.classList.remove('open');
+        };
+
+        document.getElementById('openSettingsBtn').onclick = () => {
+            playSound(400, 'sine');
+            setupOverlay.classList.remove('fade-out');
+            setupOverlay.style.display = 'flex';
+        };
+
+        if (userProfile.username) {
+            document.getElementById('usernameInput').value = userProfile.username;
+            document.getElementById('initialColorSelect').value = userProfile.color;
+            userDisplayTag.textContent = `@${userProfile.username}`;
+            applyColorTheme(userProfile.color, userProfile.accent || 'default');
+            setupOverlay.classList.add('fade-out');
+            browserAppWrapper.classList.add('active');
+            createTab();
+        }
+
+        renderBookmarks();
+        renderTiles();
+    </script>
+</body>
+</html>
